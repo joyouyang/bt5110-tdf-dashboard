@@ -7,7 +7,7 @@ import {
   axisStyle, chart, sweep, redrawAll, panel, seg, select, S,
   loadLookups, riderColor, open, closeDrawer, VIEWS, kv, sqlShow, hooks,
   toConsole,
-} from '../core.js'
+} from '../shared/core.js'
 
 async function nationView(code, title, body) {
   const [c] = await q(`SELECT country_name FROM dim_country WHERE country_code = ${str(code)}`)

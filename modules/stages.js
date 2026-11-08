@@ -7,7 +7,7 @@ import {
   axisStyle, chart, sweep, redrawAll, panel, seg, select, S,
   loadLookups, riderColor, open, closeDrawer, VIEWS, kv, sqlShow, hooks,
   toConsole,
-} from '../core.js'
+} from '../shared/core.js'
 
 async function stageTop(id, mode) {
   const riders = `SELECT f.stage_rank, r.rider_key, r.rider_name, t.team_key, t.team_name, r.rider_country_code,

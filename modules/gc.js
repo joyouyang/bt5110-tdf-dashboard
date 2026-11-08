@@ -7,7 +7,7 @@ import {
   axisStyle, chart, sweep, redrawAll, panel, seg, select, S,
   loadLookups, riderColor, open, closeDrawer, VIEWS, kv, sqlShow, hooks,
   toConsole,
-} from '../core.js'
+} from '../shared/core.js'
 
 async function riderView(key, title, body) {
   const [r] = await q(`SELECT r.*, g.gc_rank, g.gap, g.total_adjusted, g.total_bonus, g.total_penalty, g.wins, g.podiums, g.top10s, t.team_key

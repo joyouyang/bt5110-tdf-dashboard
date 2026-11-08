@@ -1,5 +1,36 @@
 # Tour de France 2025 dashboard (BT5110 Group 20)
 
+## What is in this folder 文件夹说明
+
+```
+README.md            Read this first 先读这个
+AGENTS.md            Rules for your AI assistant 给 AI 的规则
+start-mac.command    Mac: double-click to open the dashboard  Mac 双击打开
+start-windows.bat    Windows: double-click to open the dashboard  Windows 双击打开
+index.html           The dashboard page 看板页面
+
+modules/             ★ Team members edit here, one file each 组员改这里，每人一个文件
+  gc.js              GC and Young rider
+  stages.js          Stages and terrain
+  teams.js           Teams
+  nations.js         Nations
+
+shared/              Integrator only, do not edit 整合人维护，组员不动
+  app.js             Puts the tabs together 把各页拼起来
+  core.js            Database, charts, tables, side drawer 数据库、图表、表格、侧栏
+  explorer.js        Explorer tab
+  console.js         SQL console tab
+  style.css          Colours, fonts, layout 颜色、字体、版式
+
+data/                Our data 我们的数据
+  tdf-db.b64.txt     Database snapshot the dashboard loads 看板加载的数据库快照
+  full-database.sql  The same database as plain SQL (for timing in Task 4) 同一个库的完整 SQL
+
+lib/                 Third-party libraries, leave alone 第三方库，不用管
+  pglite/            PostgreSQL that runs in the browser
+  echarts.min.js     Chart library
+```
+
 ## Open it
 
 - Mac: double-click `start-mac.command`. If macOS blocks it, right-click it, choose Open, then Open again.
@@ -13,10 +44,10 @@ Double-clicking `index.html` does not work; the page has to come from the small 
 
 | Module | Your file |
 |---|---|
-| GC and Young rider | `pages/gc.js` |
-| Stages and terrain | `pages/stages.js` |
-| Teams | `pages/teams.js` |
-| Nations | `pages/nations.js` |
+| GC and Young rider | `modules/gc.js` |
+| Stages and terrain | `modules/stages.js` |
+| Teams | `modules/teams.js` |
+| Nations | `modules/nations.js` |
 
 Edit only your own file. Everything else belongs to the integrator. Send them a message if you need a change there.
 

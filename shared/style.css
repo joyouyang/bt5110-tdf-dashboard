@@ -1,7 +1,5 @@
-<title>Tour de France OLAP</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,800&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap">
-<style>
+/* Theme and layout for the whole dashboard. Colours and fonts are the tokens in :root;
+   change them here and every page follows. */
 /* Layout: a race-office timing sheet. Yellow header band, tabbed analysis pages,
    a right-hand dossier drawer that every rider, team, stage and nation opens into. */
 :root {
@@ -24,7 +22,8 @@
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
   color-scheme: dark }
 * { box-sizing: border-box }
-body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); }
+[hidden] { display: none !important }
 button, select, input, textarea { font: inherit; color: inherit }
 h1, h2, h3 { margin: 0; font-family: var(--display); text-wrap: balance }
 .gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
@@ -126,21 +125,3 @@ tr.total td { font-weight: 700; border-top: 1px solid var(--axis) }
 .road i { display: block; height: 100%; width: 34%; background: var(--jaune); animation: ride 1.3s infinite ease-in-out alternate }
 @keyframes ride { from { margin-left: 0 } to { margin-left: 66% } }
 @media (prefers-reduced-motion: reduce) { .road i { animation: none; width: 100% } }
-</style>
-
-<header class="band gutter">
-  <div class="band-in">
-    <div class="brand">
-      <h1>Tour de France 2025</h1>
-      <small>OLAP dashboard · BT5110 Group 20</small>
-      <div class="facts" id="facts"></div>
-    </div>
-    <nav id="tabs" role="tablist" aria-label="Dashboard pages"></nav>
-  </div>
-</header>
-<div class="gutter"><main id="main"><div id="boot"><b>Rolling out</b><div class="road"><i></i></div><span id="bootmsg">Loading PostgreSQL in your browser</span></div></main></div>
-<div id="scrim" hidden></div>
-<aside id="drawer" hidden aria-label="Details"></aside>
-
-<script src="./vendor/echarts.min.js"></script>
-<script type="module" src="./app.js"></script>

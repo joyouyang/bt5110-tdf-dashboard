@@ -1,13 +1,13 @@
 // Tour de France OLAP dashboard. Every number on the page comes from a SQL query
 // that runs against the star schema in PGlite, so any panel can be reopened in the console.
-// This file only wires the tabs together. Each tab lives in its own file under pages/.
+// This file only wires the tabs together. Each team member's tab lives in its own file under modules/.
 import { $, h, boot, loadLookups, live, hooks, q } from './core.js'
-import gc from './pages/gc.js'
-import stages from './pages/stages.js'
-import teams from './pages/teams.js'
-import nations from './pages/nations.js'
-import explorer from './pages/explorer.js'
-import sqlConsole from './pages/console.js'
+import gc from '../modules/gc.js'
+import stages from '../modules/stages.js'
+import teams from '../modules/teams.js'
+import nations from '../modules/nations.js'
+import explorer from './explorer.js'
+import sqlConsole from './console.js'
 
 // null draws a divider between the module pages and the tools.
 const TABS = [gc, stages, teams, nations, null, explorer, sqlConsole]

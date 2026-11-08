@@ -7,8 +7,8 @@ import {
   axisStyle, chart, sweep, redrawAll, panel, seg, select, S,
   loadLookups, riderColor, open, closeDrawer, VIEWS, kv, sqlShow, hooks,
   toConsole,
-} from '../core.js'
-import { db } from '../core.js'
+} from './core.js'
+import { db } from './core.js'
 
 // ---------- Page: SQL console ----------
 const PRESETS = [

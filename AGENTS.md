@@ -1,6 +1,6 @@
 # Rules for AI assistants editing this dashboard
 
-This repository is a static web page edited by four people. Each person edits only their own page file, so changes merge without conflicts. Follow these rules exactly.
+This repository is a static web page edited by four people. Each person edits only their own file in `modules/`, so changes merge without conflicts. Follow these rules exactly.
 
 ## Git workflow
 
@@ -8,8 +8,8 @@ Everyone works on `main`. Run the git commands for the user; many of them are ne
 
 1. Before editing: `git pull`.
 2. Edit and test (see below).
-3. Show the user the change: run `git diff pages/<file>.js` and explain in plain words what each part does. Wait until the user says yes. If they want changes, go back to step 2.
-4. Commit only the user's own page file: `git add pages/<file>.js`, then `git commit -m "<module>: <what changed>"`.
+3. Show the user the change: run `git diff modules/<file>.js` and explain in plain words what each part does. Wait until the user says yes. If they want changes, go back to step 2.
+4. Commit only the user's own module file: `git add modules/<file>.js`, then `git commit -m "<module>: <what changed>"`.
 5. `git pull --rebase`, then `git push`.
 
 Never force push, never commit other files, and never resolve a conflict in a file the user does not own. If a pull or push fails, stop and explain the message to the user.
@@ -22,14 +22,14 @@ Ask the user which module they own, then edit only that file.
 
 | Module | File | Suggested functions |
 |---|---|---|
-| GC and Young rider | `pages/gc.js` | E1, E4 (young), E7, E10, brief b and c |
-| Stages and terrain | `pages/stages.js` | E2, E4 (mountain proxy), E5, E6, E11, E15 |
-| Teams | `pages/teams.js` | E3, E12, E13, E14 |
-| Nations | `pages/nations.js` | E8, E9 |
+| GC and Young rider | `modules/gc.js` | E1, E4 (young), E7, E10, brief b and c |
+| Stages and terrain | `modules/stages.js` | E2, E4 (mountain proxy), E5, E6, E11, E15 |
+| Teams | `modules/teams.js` | E3, E12, E13, E14 |
+| Nations | `modules/nations.js` | E8, E9 |
 
-Do not edit anything else: `core.js`, `app.js`, `page.html`, `index.html`, `seed.sql`, `vendor/`, `pages/explorer.js`, `pages/console.js`. The integrator owns them. If you need a new shared helper, write a local function inside your own page file instead. If you need a style that does not exist, use an inline `style` attribute.
+Do not edit anything else: `index.html`, `shared/`, `data/`, `lib/`. The integrator owns them. If you need a new shared helper, write a local function inside your own module file instead. If you need a style that does not exist, use an inline `style` attribute.
 
-Each page file also owns one dossier in the side drawer: `gc.js` the rider dossier, `stages.js` the stage dossier, `teams.js` the team dossier, `nations.js` the nation dossier.
+Each module file also owns one dossier in the side drawer: `gc.js` the rider dossier, `stages.js` the stage dossier, `teams.js` the team dossier, `nations.js` the nation dossier.
 
 ## How to run and test
 
@@ -42,7 +42,7 @@ The page must be served over HTTP; opening `index.html` directly will not work.
 
 ## The database
 
-PostgreSQL 18 (PGlite) runs in the browser from a fixed snapshot (`vendor/tdf-db.b64.txt`). You cannot add tables or views. Put any extra logic in your query, for example as a CTE. All times are in seconds.
+PostgreSQL 18 (PGlite) runs in the browser from a fixed snapshot (`data/tdf-db.b64.txt`; the same database as plain SQL is `data/full-database.sql`). You cannot add tables or views. Put any extra logic in your query, for example as a CTE. All times are in seconds.
 
 Star schema, one fact row per rider per stage (3,602 rows):
 
@@ -107,7 +107,7 @@ p.body.append(table({ rows: await q(sql), cols: [riderCol(), { k: 'wins', l: 'Wi
 - `panel` options: `title`, `tag` (the E number), `span` (columns out of 12; omit for full width), `sql` (needed for the Open SQL button), `note`.
 - `table` columns: `k` is the field, `l` the header, `n: 1` right-aligns numbers, `f` formats a cell. Use `riderCol()`, `teamCol()`, `natLink(code)`, `stageLink(id)` so clicks open the drawer.
 - `chart((t) => option, { height, onClick })` wraps an ECharts option. Take colours from `t.s[0]` to `t.s[7]` and the text colours on `t`, and start from `...baseOpt(t)` and `...axisStyle(t)`.
-- Never write a colour code or font name in your file. All colours and fonts come from the theme in `page.html`, which the integrator will change at the end. Hard-coded values would not follow that change, or dark mode.
+- Never write a colour code or font name in your file. All colours and fonts come from the theme in `shared/style.css`, which the integrator will change at the end. Hard-coded values would not follow that change, or dark mode.
 - Format times with `fmtTime`, gaps with `fmtGap`, numbers with `fmtNum`.
 - `open({ t: 'rider' | 'team' | 'stage' | 'nation', id })` opens the drawer. Rider, team and stage use their keys; nation uses the country code.
 

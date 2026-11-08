@@ -7,7 +7,7 @@ import {
   axisStyle, chart, sweep, redrawAll, panel, seg, select, S,
   loadLookups, riderColor, open, closeDrawer, VIEWS, kv, sqlShow, hooks,
   toConsole,
-} from '../core.js'
+} from '../shared/core.js'
 
 async function teamView(key, title, body) {
   const [t] = await q(`SELECT t.*, c.team_time, c.team_rank FROM dim_team t LEFT JOIN v_team_classification c USING (team_key) WHERE t.team_key = ${Number(key)}`)
