@@ -177,12 +177,12 @@ SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_o
   const [pt] = await q(`SELECT r.rider_name, p.finish_points FROM v_finish_points p JOIN dim_rider r USING (rider_key) ORDER BY p.points_rank LIMIT 1`)
   const [tm] = await q(`SELECT t.team_name, c.team_time FROM v_team_classification c JOIN dim_team t USING (team_key) ORDER BY c.team_rank LIMIT 1`)
   root.append(h('div', { class: 'stat' }, [['j-gc', 'General', gc.rider_name, fmtTime(gc.total_adjusted)], ['j-yng', 'Young rider', yg.rider_name, fmtTime(yg.total_adjusted)],
-    ['j-kom', 'Mountain proxy', mt.rider_name, `${fmtTime(mt.mountain_time)} on 6 stages`], ['j-pts', 'Finish points', pt.rider_name, `${pt.finish_points} pts, no sprints`], ['j-team', 'Team', shortTeam(tm.team_name), fmtTime(tm.team_time)]]
+    ['j-kom', 'Mountain proxy', mt.rider_name, `${fmtTime(mt.mountain_time)} on 6 stages`], ['j-pts', 'Points', pt.rider_name, `${pt.finish_points} pts, stage finishes only`], ['j-team', 'Team', shortTeam(tm.team_name), fmtTime(tm.team_time)]]
     .map(([j, l, b, v]) => h('div', {}, h('b', {}, b), h('span', {}, h('i', { class: `jersey ${j}` }), `${l} · ${v}`)))))
 
   // Comparison
   const st = { young: 'young_official', only: false, by: 'gc_rank' }
-  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young rider follows the 2025 regulations (Art. 24 d): born on or after 1 January 2000. The second option is the suggested functions\' age filter at race start. Finish points apply the official stage-finish scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official points classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
+  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young rider follows the 2025 regulations (Art. 24 d): born on or after 1 January 2000. The second option is the suggested functions\' age filter at race start. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
   const sl = h('div', {}), tb = h('div', {})
   cp.body.append(sl, tb)
   cp.controls(seg([['young_official', 'Young: official (born 2000 or later)'], ['young_at_start', 'Young: under 26 at race start']], st.young, (v) => { st.young = v; drawCp() }),
@@ -201,7 +201,7 @@ ${st.only ? `WHERE g.${st.young}\n` : ''}ORDER BY g.gc_rank;`
     const rows = await q(sql)
     tb.replaceChildren(table({ limit: 15, rows, onRow: (r) => open({ t: 'rider', id: r.rider_key }), cols: [
       riderCol(), teamCol(), { k: 'age_at_start', l: 'Age', n: 1 },
-      { k: 'gc_rank', l: 'GC', n: 1 }, { k: 'young_rank', l: 'Young', n: 1 }, { k: 'mountain_rank', l: 'Mountain proxy', n: 1 }, { k: 'points_rank', l: 'Finish pts rank', n: 1 }, { k: 'finish_points', l: 'Finish pts', n: 1 },
+      { k: 'gc_rank', l: 'GC', n: 1 }, { k: 'young_rank', l: 'Young', n: 1 }, { k: 'mountain_rank', l: 'Mountain proxy', n: 1 }, { k: 'points_rank', l: 'Points rank', n: 1 }, { k: 'finish_points', l: 'Points', n: 1 },
       { k: 'mountain_shift', l: 'GC vs mountain', n: 1, hint: 'Positive means the rider ranks better on mountain stages than overall', f: (v) => (v == 0 ? h('span', { class: 'dim' }, '–') : h('span', { class: v > 0 ? 'up' : 'down' }, `${v > 0 ? '▲' : '▼'}${Math.abs(v)}`)) }] }))
     const list = rows.slice(0, 20)
     const movers = [...list].sort((a, b) => Math.abs(b.mountain_shift) - Math.abs(a.mountain_shift)).slice(0, 3).map((r) => r.rider_key)

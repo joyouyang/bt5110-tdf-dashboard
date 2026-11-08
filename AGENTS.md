@@ -62,20 +62,21 @@ Views:
 
 The normalized Task 2 tables (Country, Team, Rider, Location, Stage, Result, RiderExit, Classification) and the rule tables `ref_stage_coefficient` and `ref_points_scale` are also loaded.
 
+## Rule priority
+
+1. P0: the assignment brief (`BT5110 Project Tour de France 2026`).
+2. P1: the 2025 race regulations. The French text is binding (Article 31).
+3. P2: if neither settles a question, do not decide it yourself. Stop and ask the user, who takes it to the group.
+
 ## Definitions you must keep
 
-Official rules from the 2025 race regulations (the French text is binding, Article 31):
-
-- Adjusted time = finish_time − time_bonus + time_penalty (Articles 24 a, 25 and 26). Bonuses are 10, 6 and 4 seconds for the first three on road stages.
-- GC counts only riders who finished all 21 stages (Article 24 a).
-- Young rider = born on or after 1 January 2000 (Article 24 d), column `young_official`. `young_at_start` (under 26 at the start) is only the suggested functions' alternative.
-- Team classification adds each team's three fastest times on every stage (Article 24 e). Use finish_time without bonuses, which are individual.
-
-Our own choices, made because the data is incomplete:
-
-- Finish points apply the official stage-finish scale (Article 24 b, set by each stage's coefficient in Article 22). The data has no intermediate sprints, so never call them "points classification" or "green jersey". Pogacar leads finish points; Milan won the official classification.
-- Mountain proxy is adjusted time on Mountain stages (suggested functions, E4). The data has no climb points, so never call it the climbers' classification or polka-dot jersey.
-- Bib 78 (Vlasov) has no nationality in the data and counts as Unknown.
+- GC: lowest cumulative adjusted time (P0). Only riders who finished all 21 stages count (P1, Article 24 a).
+- Adjusted time = finish_time − time_bonus + time_penalty (P0; P1, Articles 24 a, 25 and 26). Bonuses are 10, 6 and 4 seconds for the first three on road stages.
+- Best Team: lowest aggregate time of a team's three fastest riders (P0), counted on every stage (P1, Article 24 e). Use finish_time without bonuses, which are individual.
+- Young rider: born on or after 1 January 2000 (P1, Article 24 d), column `young_official`. `young_at_start` (under 26 at the start) is the suggested functions' alternative.
+- Points classification: P0 asks for it but gives no rule, so it uses the official stage-finish scale (P1, Articles 22 and 24 b). The data has no intermediate sprints, so always label it "Points classification (stage finishes only)" or keep a note saying so, and never present it as the official green jersey. Pogacar leads it here; Milan won the official classification.
+- King of the Mountains: P0 asks for it, but P1 needs climb results, which the data does not have. Use the mountain proxy from the suggested functions (E4), adjusted time on Mountain stages, labelled "Mountain proxy". Never call it the polka-dot jersey.
+- Bib 78 (Vlasov) has no nationality in the data. It is NULL in the Task 2 table, which the schema allows, and shows as Unknown in the star schema (P2, decided by the group).
 
 ## Check numbers
 
@@ -87,7 +88,7 @@ These match the published 2025 results. If your change alters one, your query is
 - Team classification: Visma | Lease a Bike first, 232h01'32"
 - 38 French riders; 27 nationalities (26 in the data plus Vlasov's)
 
-These come from our own calculations and have no published equivalent: finish points Pogacar 287, Vingegaard 182, Milan 160.
+These come from our own calculations and have no published equivalent: points from stage finishes, Pogacar 287, Vingegaard 182, Milan 160.
 
 Do not compare total times with published results. On stage 21 the official times were taken early because of rain, so our totals are about one hour longer. Ranks and gaps are unaffected.
 
