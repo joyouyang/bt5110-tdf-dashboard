@@ -18,7 +18,7 @@ Do not add any AI attribution to commits, comments or files: no `Co-Authored-By`
 
 ## Which file you may edit
 
-Ask the user which module they own, then edit only that file.TDF
+Ask the user which module they own, then edit only that file.
 
 | Module | File | Suggested functions |
 |---|---|---|
