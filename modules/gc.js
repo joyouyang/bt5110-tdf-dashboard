@@ -50,17 +50,17 @@ ORDER BY s.stage_id;`
     cols: [
       { k: 'stage_id', l: 'Stage', f: (v) => stageLink(v) }, { k: 'terrain', l: 'Type', f: (v) => terrain(v) },
       { k: 'stage_rank', l: 'Rank', n: 1 }, { k: 'adjusted_time', l: 'Adj. time', n: 1, f: fmtTime },
-      { k: 'gap_to_winner', l: 'To winner', n: 1, f: fmtGap },
+      { k: 'gap_to_winner', l: 'To fastest', n: 1, f: fmtGap },
       { k: 'time_bonus', l: 'Bonus', n: 1 }, { k: 'time_penalty', l: 'Pen.', n: 1 },
       { k: 'gc_rank', l: 'GC', n: 1 }, { k: 'gap_to_leader', l: 'GC gap', n: 1, f: fmtGap },
     ], rows, hit: (x) => swings.length && x.stage_id === swings.reduce((a, b) => (Math.abs(b.gap_change) > Math.abs(a.gap_change) ? b : a)).stage_id,
-  }), sqlShow(sql))
+  }), h('p', { class: 'dim' }, 'Stage gap uses the minimum recorded finish time, which may differ from the rank-1 rider. GC gap compares with the leader at each stage; changes are not a head-to-head gap against one fixed opponent.'), sqlShow(sql))
 }
 VIEWS.rider = riderView
 
 // ---------- Page: General Classification (E1, E7, E10) ----------
 const SCEN = {
-  official: ['Official', 'total_finish - total_bonus + total_penalty'],
+  official: ['Dataset baseline', 'total_finish - total_bonus + total_penalty'],
   nobonus: ['No bonuses', 'total_finish + total_penalty'],
   nopenalty: ['No penalties', 'total_finish - total_bonus'],
   raw: ['Neither', 'total_finish'],
@@ -68,7 +68,7 @@ const SCEN = {
 async function pageGC(root) {
   const top = await q(`SELECT rider_name, total_adjusted, gap, team_name FROM v_gc ORDER BY gc_rank LIMIT 3`)
   root.append(h('div', { class: 'stat' },
-    h('div', {}, h('b', {}, top[0].rider_name), h('span', {}, h('i', { class: 'jersey j-gc' }), `GC winner · ${fmtTime(top[0].total_adjusted)}`)),
+    h('div', {}, h('b', {}, top[0].rider_name), h('span', {}, h('i', { class: 'jersey j-gc' }), `Dataset GC winner · ${fmtTime(top[0].total_adjusted)}`)),
     h('div', {}, h('b', {}, fmtGap(top[1].gap)), h('span', {}, `${top[1].rider_name} in second`)),
     h('div', {}, h('b', {}, fmtGap(top[2].gap)), h('span', {}, `${top[2].rider_name} in third`)),
     h('div', {}, h('b', {}, `${S.counts.finishers} of ${S.counts.riders}`), h('span', {}, 'Riders reached Paris'))))
@@ -99,7 +99,7 @@ ORDER BY p.stage_id, p.gc_rank;`
     const rows = await q(sql)
     const names = st.keys.map((k) => rows.find((r) => r.rider_key === k)?.rider_name ?? S.riders.find((x) => x.rider_key === k).rider_name)
     pills.replaceChildren(...st.keys.map((k, i) => h('span', { class: 'pill' }, h('i', { style: `background:var(--s${i + 1})` }), names[i],
-      h('button', { 'aria-label': `Remove ${names[i]}`, onclick: () => { st.keys = st.keys.filter((x) => x !== k); if (st.keys.length) drawStory() } }, '×'))))
+      h('button', { 'aria-label': `Remove ${names[i]}`, onclick: () => { if (st.keys.length === 1) return; st.keys = st.keys.filter((x) => x !== k); drawStory() }, disabled: st.keys.length === 1 }, '×'))))
     const opt = (t) => {
       const ser = st.keys.map((k, i) => {
         const pts = rows.filter((r) => r.rider_key === k)
@@ -129,6 +129,7 @@ ORDER BY p.stage_id, p.gc_rank;`
     sweep()
   }
   await drawStory()
+  await pivotalStages(root)
 
   // Leaderboard with counterfactuals
   const lb = panel(root, { title: 'GC leaderboard', tag: 'E1 E7', note: 'Lowest cumulative adjusted time among the riders who finished all 21 stages. Pick a scenario to replay the standings without bonuses or penalties. Open a rider to find the day that most changed their race.', sql: '' })
@@ -150,7 +151,7 @@ ORDER BY scenario_rank;`
     const moved = rows.filter((r) => Number(r.scenario_rank) !== Number(r.official_rank))
     const into = rows.filter((r) => r.scenario_rank <= 10 && r.official_rank > 10)
     const out = rows.filter((r) => r.scenario_rank > 10 && r.official_rank <= 10)
-    noteEl.textContent = s === 'official' ? 'Official standings. Sort any column, for example Bonus, to rank riders by cumulative bonus seconds.'
+    noteEl.textContent = s === 'official' ? 'Dataset baseline, not a reproduction of official published total times. Sort Bonus or Penalty to compare cumulative seconds. Ranks use time only; official tie-breaks are not applied.'
       : (moved.length ? `${moved.length} riders change position under “${SCEN[s][0]}”. ` : `Nobody changes position under “${SCEN[s][0]}”. Time gaps are larger than the bonuses and penalties involved. `) + (into.length || out.length ? `Into the top ten: ${into.map((r) => r.rider_name).join(', ') || 'nobody'}. Out: ${out.map((r) => r.rider_name).join(', ') || 'nobody'}.` : 'The top ten stays the same riders.')
     tableSlot.replaceChildren(table({
       limit: 20, rows, hit: (r) => r.scenario_rank <= 3,
@@ -164,6 +165,31 @@ ORDER BY scenario_rank;`
   }
   await drawLb('official')
   await classificationPanels(root)
+}
+
+// Compare the same riders on consecutive stages; stage 1 has no prior standing.
+async function pivotalStages(root) {
+  const sql = `SELECT p.stage_id, s.terrain,
+       COUNT(*) AS comparable_riders,
+       COUNT(*) FILTER (WHERE p.gc_rank <> prev.gc_rank) AS riders_moved,
+       SUM(ABS(p.gc_rank - prev.gc_rank)) AS total_rank_movement,
+       MAX(ABS(p.gc_rank - prev.gc_rank)) AS largest_move
+FROM v_gc_progress p
+JOIN v_gc_progress prev ON prev.rider_key = p.rider_key AND prev.stage_id = p.stage_id - 1
+JOIN dim_stage s ON s.stage_id = p.stage_id
+GROUP BY p.stage_id, s.terrain
+ORDER BY riders_moved DESC, total_rank_movement DESC, p.stage_id;`
+  const rows = await q(sql)
+  const p = panel(root, { title: 'Where standings moved most', tag: 'E1 E10', sql,
+    note: 'Count riders whose GC rank changed from the previous stage, comparing only riders present on both days. Stage 1 is excluded. Exits can also shift ranks; this measures changes in standings, not the causal difficulty of a route. Click a stage for its details.' })
+  p.body.append(table({ rows, limit: 5, cols: [
+    { k: 'stage_id', l: 'Stage', f: (v) => stageLink(v) },
+    { k: 'terrain', l: 'Terrain', f: (v) => terrain(v) },
+    { k: 'riders_moved', l: 'Riders changing rank', n: 1 },
+    { k: 'comparable_riders', l: 'Compared riders', n: 1 },
+    { k: 'total_rank_movement', l: 'Sum of absolute moves', n: 1 },
+    { k: 'largest_move', l: 'Largest single move', n: 1 },
+  ] }))
 }
 
 // ---------- Parallel classifications (brief b and c, E4) ----------
@@ -182,10 +208,10 @@ SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_a
 
   // Comparison
   const st = { young: 'young_at_start', only: false, by: 'gc_rank' }
-  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young rider means under 26 on the first race day, as the suggested functions set the age filter at race start. The 2025 regulations (Art. 24 d) use born on or after 1 January 2000 instead, which drops Johannessen and makes Vauquelin third, as in the published standings. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
+  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'The default is an exploratory under-26-at-start filter chosen for this dashboard. E4 anchors age at race start but does not specify this threshold. The 2025 regulations (Art. 24 d) use born on or after 1 January 2000 instead, which drops Johannessen and makes Vauquelin third, as in the published standings. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
   const sl = h('div', {}), tb = h('div', {})
   cp.body.append(sl, tb)
-  cp.controls(seg([['young_at_start', 'Young: under 26 at race start'], ['young_born_2000', 'Young: born 2000 or later (regulations)']], st.young, (v) => { st.young = v; drawCp() }),
+  cp.controls(seg([['young_at_start', 'Age filter: under 26 at start'], ['young_born_2000', 'Young: born 2000 or later (regulations)']], st.young, (v) => { st.young = v; drawCp() }),
     seg([['false', 'All finishers'], ['true', 'Young riders only']], 'false', (v) => { st.only = v === 'true'; drawCp() }))
   async function drawCp() {
     const sql = `SELECT g.rider_key, g.rider_name, g.team_name, t.team_key, g.age_at_start,
