@@ -170,9 +170,9 @@ ORDER BY scenario_rank;`
 async function classificationPanels(root) {
   const cumSql = `SELECT 'General' AS class, r.rider_name AS leader, g.total_adjusted AS value FROM v_gc g JOIN dim_rider r USING (rider_key) WHERE g.gc_rank = 1
 UNION ALL
-SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_official ORDER BY 3 LIMIT 1;`
+SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_at_start ORDER BY 3 LIMIT 1;`
   const [gc] = await q(`SELECT rider_name, total_adjusted FROM v_gc ORDER BY gc_rank LIMIT 1`)
-  const [yg] = await q(`SELECT rider_name, total_adjusted FROM v_gc WHERE young_official ORDER BY total_adjusted LIMIT 1`)
+  const [yg] = await q(`SELECT rider_name, total_adjusted FROM v_gc WHERE young_at_start ORDER BY total_adjusted LIMIT 1`)
   const [mt] = await q(`SELECT r.rider_name, m.mountain_time FROM v_mountain_proxy m JOIN dim_rider r USING (rider_key) ORDER BY m.mountain_rank LIMIT 1`)
   const [pt] = await q(`SELECT r.rider_name, p.finish_points FROM v_finish_points p JOIN dim_rider r USING (rider_key) ORDER BY p.points_rank LIMIT 1`)
   const [tm] = await q(`SELECT t.team_name, c.team_time FROM v_team_classification c JOIN dim_team t USING (team_key) ORDER BY c.team_rank LIMIT 1`)
@@ -181,11 +181,11 @@ SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_o
     .map(([j, l, b, v]) => h('div', {}, h('b', {}, b), h('span', {}, h('i', { class: `jersey ${j}` }), `${l} · ${v}`)))))
 
   // Comparison
-  const st = { young: 'young_official', only: false, by: 'gc_rank' }
-  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young rider follows the 2025 regulations (Art. 24 d): born on or after 1 January 2000. The second option is the suggested functions\' age filter at race start. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
+  const st = { young: 'young_at_start', only: false, by: 'gc_rank' }
+  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young rider means under 26 on the first race day, as the suggested functions set the age filter at race start. The 2025 regulations (Art. 24 d) use born on or after 1 January 2000 instead, which drops Johannessen and makes Vauquelin third, as in the published standings. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.' })
   const sl = h('div', {}), tb = h('div', {})
   cp.body.append(sl, tb)
-  cp.controls(seg([['young_official', 'Young: official (born 2000 or later)'], ['young_at_start', 'Young: under 26 at race start']], st.young, (v) => { st.young = v; drawCp() }),
+  cp.controls(seg([['young_at_start', 'Young: under 26 at race start'], ['young_born_2000', 'Young: born 2000 or later (regulations)']], st.young, (v) => { st.young = v; drawCp() }),
     seg([['false', 'All finishers'], ['true', 'Young riders only']], 'false', (v) => { st.only = v === 'true'; drawCp() }))
   async function drawCp() {
     const sql = `SELECT g.rider_key, g.rider_name, g.team_name, t.team_key, g.age_at_start,

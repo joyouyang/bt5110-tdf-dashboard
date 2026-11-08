@@ -4405,8 +4405,8 @@ CREATE TABLE dim_rider (
     dob                 DATE NOT NULL,
     age_at_start        INT NOT NULL,
     age_band            TEXT NOT NULL,
-    young_official      BOOLEAN NOT NULL,   -- born on or after 2000-01-01 (2025 regulations, Art. 24 d)
-    young_at_start      BOOLEAN NOT NULL,   -- under 26 on 2025-07-05 (suggested functions, E4)
+    young_born_2000     BOOLEAN NOT NULL,   -- born on or after 2000-01-01 (2025 regulations, Art. 24 d)
+    young_at_start      BOOLEAN NOT NULL,   -- under 26 on 2025-07-05 (suggested functions E4, the project rule)
     team_name           TEXT NOT NULL,
     rider_country_code  TEXT NOT NULL,
     rider_country_name  TEXT NOT NULL,
@@ -4460,7 +4460,7 @@ SELECT t.team_name, c.country_code, c.country_name
 FROM Team t JOIN Country c USING (country_code)
 ORDER BY t.team_name;
 
-INSERT INTO dim_rider (bib_number, rider_name, dob, age_at_start, age_band, young_official,
+INSERT INTO dim_rider (bib_number, rider_name, dob, age_at_start, age_band, young_born_2000,
                        young_at_start, team_name, rider_country_code, rider_country_name,
                        race_status, exit_stage, exit_reason)
 SELECT r.bib_number, r.rider_name, r.dob,
@@ -4536,7 +4536,7 @@ WHERE stages_ridden = stage_id;
 -- Rider totals for the riders who completed all 21 stages.
 CREATE VIEW v_rider_totals AS
 SELECT r.rider_key, r.bib_number, r.rider_name, r.team_name, r.rider_country_code,
-       r.rider_country_name, r.age_at_start, r.young_official, r.young_at_start,
+       r.rider_country_name, r.age_at_start, r.young_born_2000, r.young_at_start,
        SUM(f.adjusted_time) AS total_adjusted,
        SUM(f.finish_time) AS total_finish,
        SUM(f.time_bonus) AS total_bonus,

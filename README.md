@@ -37,4 +37,4 @@ Every change is kept in the history on GitHub, so a mistake can always be undone
 
 ## Where the numbers come from
 
-The data and rules are the same as `BT5110_Task3_data_v2`: 2025 dates, the young rider rule from the 2025 regulations (born on or after 1 January 2000), and stage-finish points on the official scale. The data has no intermediate sprints or climb points, so the dashboard shows a points classification from stage finishes only and a mountain time proxy, not the official green and polka-dot jerseys.
+The data and rules are the same as `BT5110_Task3_data_v2`: 2025 dates, the young rider rule from the suggested functions (under 26 on the first race day), and stage-finish points on the official scale. The data has no intermediate sprints or climb points, so the dashboard shows a points classification from stage finishes only and a mountain time proxy, not the official green and polka-dot jerseys.

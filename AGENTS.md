@@ -47,14 +47,14 @@ PostgreSQL 18 (PGlite) runs in the browser from a fixed snapshot (`vendor/tdf-db
 Star schema, one fact row per rider per stage (3,602 rows):
 
 - `fact_results`: rider_key, stage_key, team_key, country_key, finish_time, time_bonus, time_penalty, adjusted_time, stage_rank, gap_to_winner, speed_kmh, is_win, is_podium, is_top10
-- `dim_rider`: rider_key, bib_number, rider_name, dob, age_at_start, age_band, young_official, young_at_start, team_name, rider_country_code, rider_country_name, race_status ('Finished' or 'Exited'), exit_stage, exit_reason
+- `dim_rider`: rider_key, bib_number, rider_name, dob, age_at_start, age_band, young_at_start, young_born_2000, team_name, rider_country_code, rider_country_name, race_status ('Finished' or 'Exited'), exit_stage, exit_reason
 - `dim_stage`: stage_key, stage_id (1 to 21), stage_date, race_week, stage_type, terrain ('Flat', 'Hilly', 'Mountain', 'ITT'), distance_km, start_location, start_country, finish_location, finish_country, route, coefficient, winner_points
 - `dim_team`: team_key, team_name, team_country_code, team_country_name
 - `dim_country`: country_key, country_code, country_name (bib 78 maps to 'UNK')
 
 Views:
 
-- `v_gc`: final GC for the 160 finishers. gc_rank, gap, total_adjusted, total_finish, total_bonus, total_penalty, wins, podiums, top10s, young_official, young_at_start
+- `v_gc`: final GC for the 160 finishers. gc_rank, gap, total_adjusted, total_finish, total_bonus, total_penalty, wins, podiums, top10s, young_at_start, young_born_2000
 - `v_gc_progress`: rider_key, stage_id, cum_adjusted, gc_rank, gap_to_leader after every stage
 - `v_mountain_proxy`: rider_key, mountain_time, mountain_rank
 - `v_finish_points`: rider_key, finish_points, stage_wins, points_rank
@@ -73,7 +73,7 @@ The normalized Task 2 tables (Country, Team, Rider, Location, Stage, Result, Rid
 - GC: lowest cumulative adjusted time (P0). Only riders who finished all 21 stages count (P1, Article 24 a).
 - Adjusted time = finish_time − time_bonus + time_penalty (P0; P1, Articles 24 a, 25 and 26). Bonuses are 10, 6 and 4 seconds for the first three on road stages.
 - Best Team: lowest aggregate time of a team's three fastest riders (P0), counted on every stage (P1, Article 24 e). Use finish_time without bonuses, which are individual.
-- Young rider: born on or after 1 January 2000 (P1, Article 24 d), column `young_official`. `young_at_start` (under 26 at the start) is the suggested functions' alternative.
+- Young rider: under 26 on 5 July 2025, the first race day (P0: the suggested functions, E4, anchor the age filter at race start), column `young_at_start`. `young_born_2000` is the regulations' rule (P1, Article 24 d), shown only as a comparison.
 - Points classification: P0 asks for it but gives no rule, so it uses the official stage-finish scale (P1, Articles 22 and 24 b). The data has no intermediate sprints, so always label it "Points classification (stage finishes only)" or keep a note saying so, and never present it as the official green jersey. Pogacar leads it here; Milan won the official classification.
 - King of the Mountains: P0 asks for it, but P1 needs climb results, which the data does not have. Use the mountain proxy from the suggested functions (E4), adjusted time on Mountain stages, labelled "Mountain proxy". Never call it the polka-dot jersey.
 - Bib 78 (Vlasov) has no nationality in the data. It is NULL in the Task 2 table, which the schema allows, and shows as Unknown in the star schema (P2, decided by the group).
@@ -84,11 +84,13 @@ These match the published 2025 results. If your change alters one, your query is
 
 - 184 starters, 160 finishers
 - GC: Pogacar first, Vingegaard +4'24", Lipowitz +11'00"
-- Young rider top three: Lipowitz, Onley, Vauquelin
 - Team classification: Visma | Lease a Bike first, 232h01'32"
 - 38 French riders; 27 nationalities (26 in the data plus Vlasov's)
 
-These come from our own calculations and have no published equivalent: points from stage finishes, Pogacar 287, Vingegaard 182, Milan 160.
+These come from our own rules and differ from or have no published equivalent:
+
+- Young rider top three: Lipowitz, Onley, Johannessen; 50 eligible finishers. The published standings use the regulations' birth-date rule, which gives Vauquelin third.
+- Points from stage finishes: Pogacar 287, Vingegaard 182, Milan 160.
 
 Do not compare total times with published results. On stage 21 the official times were taken early because of rain, so our totals are about one hour longer. Ranks and gaps are unaffected.
 
