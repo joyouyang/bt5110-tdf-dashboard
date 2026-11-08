@@ -14,6 +14,8 @@ Everyone works on `main`. Run the git commands for the user; many of them are ne
 
 Never force push, never commit other files, and never resolve a conflict in a file the user does not own. If a pull or push fails, stop and explain the message to the user.
 
+Do not add any AI attribution to commits, comments or files: no `Co-Authored-By` lines, no "Generated with" notes, no tool names. Commit messages contain only the module and the change.
+
 ## Which file you may edit
 
 Ask the user which module they own, then edit only that file.TDF
