@@ -23,7 +23,7 @@ LEFT JOIN v_gc_progress p ON p.rider_key = f.rider_key AND p.stage_id = s.stage_
 WHERE f.rider_key = ${Number(key)}
 ORDER BY s.stage_id;`
   const rows = await q(sql)
-  body.append(h('div', { class: 'row' }, teamLink(r.team_name, r.team_key), natLink(r.rider_country_code), h('span', { class: 'dim' }, `age ${r.age_at_start} at the start · ${r.young_born_2000 ? 'Young rider eligible (born 2000 or later)' : 'Not eligible for Young rider'}`)))
+  body.append(h('div', { class: 'row' }, teamLink(r.team_name, r.team_key), natLink(r.rider_country_code), h('span', { class: 'dim' }, `age ${r.age_at_start} at the start · ${r.young_at_start ? 'Young rider eligible (under 26 at race start)' : 'Not eligible for Young rider'}`)))
   if (r.race_status === 'Finished') {
     body.append(kv([[`#${r.gc_rank}`, 'GC rank'], [fmtTime(r.total_adjusted), 'Adjusted time'], [fmtGap(r.gap), 'Behind the winner'], [r.wins, 'Stage wins'], [r.podiums, 'Podiums'], [r.top10s, 'Top tens']]))
   } else {
@@ -269,9 +269,9 @@ ORDER BY ${st.sort === 'magnitude' ? 'mean_rank_movement DESC, total_rank_moveme
 async function classificationPanels(root) {
   const cumSql = `SELECT 'General' AS class, r.rider_name AS leader, g.total_adjusted AS value FROM v_gc g JOIN dim_rider r USING (rider_key) WHERE g.gc_rank = 1
 UNION ALL
-SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_born_2000 ORDER BY 3 LIMIT 1;`
+SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_at_start ORDER BY 3 LIMIT 1;`
   const [gc] = await q(`SELECT rider_name, total_adjusted FROM v_gc ORDER BY gc_rank LIMIT 1`)
-  const [yg] = await q(`SELECT rider_name, total_adjusted FROM v_gc WHERE young_born_2000 ORDER BY total_adjusted LIMIT 1`)
+  const [yg] = await q(`SELECT rider_name, total_adjusted FROM v_gc WHERE young_at_start ORDER BY total_adjusted LIMIT 1`)
   const [mt] = await q(`SELECT r.rider_name, m.mountain_time FROM v_mountain_proxy m JOIN dim_rider r USING (rider_key) ORDER BY m.mountain_rank LIMIT 1`)
   const [pt] = await q(`SELECT r.rider_name, p.finish_points FROM v_finish_points p JOIN dim_rider r USING (rider_key) ORDER BY p.points_rank LIMIT 1`)
   const [tm] = await q(`SELECT t.team_name, c.team_time FROM v_team_classification c JOIN dim_team t USING (team_key) ORDER BY c.team_rank LIMIT 1`)
@@ -280,9 +280,9 @@ SELECT 'Young rider', g.rider_name, g.total_adjusted FROM v_gc g WHERE g.young_b
     .map(([j, l, b, v]) => h('div', {}, h('b', {}, b), h('span', {}, h('i', { class: `jersey ${j}` }), `${l} · ${v}`)))))
 
   // Comparison
-  const st = { young: 'young_born_2000', only: false, detailed: false }
-  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young: born on or after 1 Jan 2000. Points: stage finishes only. Mountain: time proxy, not official KOM.' })
-  cp.body.append(h('details', {}, h('summary', {}, 'Definitions and data limits'), h('p', {}, 'Young rider uses birth dates on or after 1 January 2000, following the French 2025 regulations (Art. 24 d; French text prevails under Art. 31). Age is displayed at race start, not used as a separate under-26 eligibility rule. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.')))
+  const st = { young: 'young_at_start', only: false, detailed: false }
+  const cp = panel(root, { title: 'Classification comparison', tag: 'Brief b · E4', sql: '', note: 'Young: under 26 on 5 July 2025 (group definition). Points: stage finishes only. Mountain: time proxy, not official KOM.' })
+  cp.body.append(h('details', {}, h('summary', {}, 'Definitions and data limits'), h('p', {}, 'For this project, our group defines Young Rider as under 26 on the first race day, 5 July 2025. This age-based definition differs from the official 2025 French regulations, which require birth on or after 1 January 2000. Under our definition Johannessen is third; under the official birth-date rule Vauquelin is third. Points classification counts stage finishes only, on the official scale (Art. 24 b), which depends on each stage\'s coefficient. The data has no intermediate sprints, so sprinters are understated: Milan won the official classification with 372. Mountain proxy adds adjusted time on Mountain stages only, as the suggested functions propose; the data has no climb points.')))
   const sl = h('div', {}), tb = h('div', {})
   cp.body.append(tb, h('details', {}, h('summary', {}, 'Compare GC and mountain ranks visually'), sl))
   cp.controls(seg([['false', 'All finishers'], ['true', 'Young riders only']], 'false', (v) => { st.only = v === 'true'; drawCp() }),
