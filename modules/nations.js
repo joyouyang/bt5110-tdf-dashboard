@@ -11,18 +11,21 @@ import {
 
 // GC rank for a finisher, or the stage where the rider left the race.
 const gcCol = () => ({ k: 'gc_rank', l: 'GC', n: 1, f: (v, r) => v ?? (r.exit_stage ? `Out S${r.exit_stage}` : '') })
+// Time behind the GC winner, and total adjusted time, for finishers.
+const gapCol = () => ({ k: 'gap', l: 'Gap', n: 1, hint: 'Time behind the GC winner', f: (v) => fmtGap(v) })
+const timeCol = () => ({ k: 'total_adjusted', l: 'Time', n: 1, hint: 'Total adjusted time over 21 stages. Official stage 21 times were taken early because of rain, so official totals are shorter; gaps are unaffected.', f: (v) => fmtTime(v) })
 
 async function nationView(code, title, body) {
   const [c] = await q(`SELECT country_name FROM dim_country WHERE country_code = ${str(code)}`)
   title.textContent = `${c?.country_name ?? code} (${code})`
-  const sql = `SELECT r.rider_key, r.rider_name, t.team_key, t.team_name, r.race_status, r.exit_stage, g.gc_rank,
+  const sql = `SELECT r.rider_key, r.rider_name, t.team_key, t.team_name, r.race_status, r.exit_stage, g.gc_rank, g.gap, g.total_adjusted,
        COALESCE(SUM(f.is_win), 0) AS wins, COALESCE(SUM(f.is_podium), 0) AS podiums
 FROM dim_rider r
 JOIN dim_team t USING (team_name)
 LEFT JOIN fact_results f USING (rider_key)
 LEFT JOIN v_gc g USING (rider_key)
 WHERE r.rider_country_code = ${str(code)}
-GROUP BY r.rider_key, t.team_key, g.gc_rank
+GROUP BY r.rider_key, t.team_key, g.gc_rank, g.gap, g.total_adjusted
 ORDER BY g.gc_rank NULLS LAST, r.rider_name;`
   const rows = await q(sql)
   const homeTeams = await q(`SELECT team_key, team_name FROM dim_team WHERE team_country_code = ${str(code)} ORDER BY team_name`)
@@ -30,7 +33,7 @@ ORDER BY g.gc_rank NULLS LAST, r.rider_name;`
   const best = rows.map((r) => r.gc_rank).filter(Boolean)
   body.append(kv([[rows.length, 'Riders'], [homeTeams.length, 'Teams registered here'], [new Set(rows.map((r) => r.team_key)).size, 'Teams represented'], [best.length ? `#${Math.min(...best)}` : 'None', 'Best GC'], [rows.reduce((a, r) => a + Number(r.wins), 0), 'Stage wins'], [rows.reduce((a, r) => a + Number(r.podiums), 0), 'Podiums']]))
   if (homeTeams.length) body.append(h('div', { class: 'row' }, h('span', { class: 'dim' }, 'Registered here:'), homeTeams.map((t) => teamLink(t.team_name, t.team_key))))
-  if (rows.length) body.append(h('h3', {}, 'Riders and their teams'), table({ cols: [riderCol(), teamCol(), gcCol(), { k: 'wins', l: 'Wins', n: 1 }, { k: 'podiums', l: 'Podiums', n: 1 }], rows }))
+  if (rows.length) body.append(h('h3', {}, 'Riders and their teams, best GC first'), table({ cols: [riderCol(), teamCol(), gcCol(), gapCol(), timeCol(), { k: 'wins', l: 'Wins', n: 1 }, { k: 'podiums', l: 'Podiums', n: 1 }], rows }))
   if (podiums.length) body.append(h('h3', {}, 'Stage podiums (wins highlighted)'), table({ hit: (r) => Number(r.is_win) === 1, cols: [{ k: 'stage_id', l: 'Stage', f: (v) => stageLink(v) }, { k: 'terrain', l: 'Type', f: (v) => terrain(v) }, riderCol(), { k: 'stage_rank', l: 'Rank', n: 1, f: (v, r) => (Number(r.is_win) === 1 ? h('b', {}, 'Win') : v) }], rows: podiums }))
   body.append(sqlShow(sql))
 }
@@ -97,7 +100,7 @@ async function worldMap(root, rows, sql) {
     if (!mode) { list.replaceChildren(h('div', { class: 'dim' }, 'Choose Teams registered or Riders.')); return }
     const listSql = mode === 'teams'
       ? `SELECT team_key, team_name FROM dim_team WHERE team_country_code = ${str(r.code)} ORDER BY team_name;`
-      : `SELECT r.rider_key, r.rider_name, t.team_key, t.team_name, r.exit_stage, g.gc_rank
+      : `SELECT r.rider_key, r.rider_name, t.team_key, t.team_name, r.exit_stage, g.gc_rank, g.gap
 FROM dim_rider r
 JOIN dim_team t USING (team_name)
 LEFT JOIN v_gc g USING (rider_key)
@@ -107,7 +110,7 @@ ORDER BY g.gc_rank NULLS LAST, r.rider_name;`
     if (mine !== seq) return
     d.sql = listSql
     if (!data.length) { list.replaceChildren(h('div', { class: 'dim' }, mode === 'teams' ? `No team is registered in ${r.name}.` : `${r.name} has no riders in this race.`)); return }
-    list.replaceChildren(table({ rows: data, limit: 10, cols: mode === 'teams' ? [teamCol()] : [riderCol(), teamCol(), gcCol()] }))
+    list.replaceChildren(table({ rows: data, limit: 10, cols: mode === 'teams' ? [teamCol()] : [riderCol(), teamCol(), gcCol(), gapCol()] }))
   }
   function pick(code) {
     selected = code
@@ -120,6 +123,66 @@ ORDER BY g.gc_rank NULLS LAST, r.rider_name;`
     redraw()
     showList()
   }
+}
+
+// ---------- Nation podium (E9) ----------
+// Stage podium places credited to the team's registered country or to the rider's nationality.
+const podiumSql = (basis) => {
+  const [join, code, name] = basis === 'team'
+    ? ['dim_team t USING (team_key)', 't.team_country_code', 't.team_country_name']
+    : ['dim_rider r USING (rider_key)', 'r.rider_country_code', 'r.rider_country_name']
+  return `WITH p AS (
+  SELECT ${code} AS code, ${name} AS name, f.stage_rank
+  FROM fact_results f
+  JOIN ${join}
+  WHERE f.is_podium = 1
+), c AS (
+  SELECT code, name,
+         COUNT(*) FILTER (WHERE stage_rank = 1) AS firsts,
+         COUNT(*) FILTER (WHERE stage_rank = 2) AS seconds,
+         COUNT(*) FILTER (WHERE stage_rank = 3) AS thirds,
+         COUNT(*) AS podiums
+  FROM p GROUP BY code, name
+)
+SELECT RANK() OVER (ORDER BY firsts DESC, seconds DESC, thirds DESC) AS nation_rank, *
+FROM c
+ORDER BY nation_rank, name;`
+}
+const STEPS = { 1: { height: 112, bg: 'var(--jaune)', fg: 'var(--on-jaune)' }, 2: { height: 84, bg: 'var(--sunken)', fg: 'var(--ink)' }, 3: { height: 62, bg: 'var(--sunken)', fg: 'var(--ink)' } }
+const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`
+
+const podiumBlocks = (top) => h('div', { style: 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end;max-width:640px;margin:4px auto 16px' },
+  [2, 1, 3].map((place) => {
+    const here = top.filter((r) => Number(r.nation_rank) === place), s = STEPS[place]
+    return h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0' },
+      here.map((r) => h('div', {},
+        h('button', { class: 'lnk', style: 'font-weight:600;white-space:normal', onclick: () => open({ t: 'nation', id: r.code }) }, r.name),
+        h('div', { class: 'dim', style: 'font-size:12px' }, `${plural(r.firsts, 'win')} · ${plural(r.podiums, 'podium')}`))),
+      h('div', { style: `width:100%;height:${s.height}px;background:${s.bg};color:${s.fg};border:1px solid var(--line);border-radius:4px 4px 0 0;display:flex;justify-content:center;padding-top:8px;font-size:28px;font-weight:700` }, String(place)))
+  }))
+
+async function nationPodium(root) {
+  let basis = 'team', seq = 0
+  const p = panel(root, { title: 'Nation podium', tag: 'E9', sql: podiumSql(basis), note: 'Stage wins, 2nd and 3rd places by nation, ranked like a medal table: most wins first, then 2nd places, then 3rd places. Team registered credits each result to the country of the rider\'s team; Riders credits it to the rider\'s nationality. Click a nation for its riders and stages.' })
+  const out = h('div')
+  p.body.append(out)
+  const draw = async () => {
+    const mine = ++seq, sql = podiumSql(basis)
+    const rows = await q(sql)
+    const [all] = await q(basis === 'team' ? 'SELECT COUNT(DISTINCT team_country_code) AS n FROM dim_team' : 'SELECT COUNT(DISTINCT rider_country_code) AS n FROM dim_rider')
+    if (mine !== seq) return
+    p.sql = sql
+    const rest = rows.filter((r) => Number(r.nation_rank) > 3)
+    out.replaceChildren(
+      podiumBlocks(rows.filter((r) => Number(r.nation_rank) <= 3)),
+      rest.length ? table({ rows: rest, onRow: (r) => open({ t: 'nation', id: r.code }), cols: [
+        { k: 'nation_rank', l: 'Rank', n: 1 }, { k: 'code', l: 'Code', f: (v) => natLink(v) }, { k: 'name', l: 'Country' },
+        { k: 'firsts', l: '1st', n: 1 }, { k: 'seconds', l: '2nd', n: 1 }, { k: 'thirds', l: '3rd', n: 1 }, { k: 'podiums', l: 'Podiums', n: 1 }] }) : null,
+      h('div', { class: 'dim', style: 'padding-top:8px' }, `${rows.length} of ${all.n} ${basis === 'team' ? 'team countries' : 'nationalities'} reached a stage podium.`),
+    )
+  }
+  p.controls(seg([['team', 'Team registered'], ['rider', 'Riders']], basis, (v) => { basis = v; draw() }))
+  await draw()
 }
 
 // ---------- Page: Nations (brief d, E8, E9) ----------
@@ -159,6 +222,7 @@ ORDER BY best_gc NULLS LAST, riders DESC, code;`
   a.body.append(bar('riders', 'riders', r1, 0))
   const b = panel(root, { title: 'Teams per country', tag: 'Brief d · E8', span: 5, sql: `SELECT team_country_name, COUNT(*) AS teams FROM dim_team GROUP BY 1 ORDER BY 2 DESC;`, note: 'By the country a team is registered in, which can differ from where its riders come from.' })
   b.body.append(bar('teams', 'teams', t1, 1))
+  await nationPodium(root)
   const c = panel(root, { title: 'National outcomes', tag: 'E9', sql, note: `Best GC rank, stage wins and podiums by rider nationality, best GC first. ${rows.length} rows: ${withRiders.length} nationalities (including Unknown) and ${teamOnly.length} countries with a registered team but no riders (${teamOnly.map((r) => r.name).join(', ')}). Teams represented counts the teams a country's riders rode for. Open a country for its riders, teams and the stages behind the tallies.` })
   c.body.append(table({ rows, onRow: (r) => open({ t: 'nation', id: r.code }), cols: [
     { k: 'code', l: 'Code', f: (v) => natLink(v) }, { k: 'name', l: 'Country' }, { k: 'riders', l: 'Riders', n: 1 }, { k: 'finishers', l: 'Finishers', n: 1 }, { k: 'teams', l: 'Teams registered', n: 1 }, { k: 'teams_represented', l: 'Teams represented', n: 1 },
