@@ -33,8 +33,9 @@ GROUP BY r.rider_key, g.gc_rank
 ORDER BY team_top3 DESC, top10s DESC, r.rider_name;`
   const riders = await q(sql)
   const fin = riders.filter((r) => r.race_status === 'Finished').length
-  body.append(kv([[t.team_country_code, t.team_country_name], [`${riders.length} / ${fin}`, 'Riders / finishers'], [new Set(riders.map((r) => r.rider_country_code)).size, 'Rider nations'],
-    [`#${t.team_rank}`, 'Team classification'], [fmtTime(t.team_time), 'Best 3 per stage']]))
+  body.append(kv([[t.team_country_code, t.team_country_name], [riders.length, 'Roster size'], [fin, 'Finishers'],
+    [new Set(riders.map((r) => r.rider_country_code)).size, 'Rider nationalities'], [`#${t.team_rank}`, 'Team classification rank'],
+    [fmtTime(t.team_time), 'Team classification time']]))
   body.append(h('h3', {}, 'Rider performance'), h('p', { class: 'dim' }, 'Team top 3 counts selection for the reconstructed team classification; it does not measure tactical role or causal contribution. Adjusted time supports the team roll-up, not a contribution score.'), table({
     cols: [riderCol(), { k: 'rider_country_code', l: 'Nat.', f: (v) => natLink(v) }, { k: 'gc_rank', l: 'GC', n: 1, f: (v, r) => v ?? `Out S${r.exit_stage}` },
       { k: 'stages', l: 'Stages', n: 1 }, { k: 'avg_gap', l: 'Avg. gap', n: 1, f: (v) => (v == null ? '-' : fmtGap(v)) }, { k: 'team_top3', l: 'Team top 3', n: 1 },
@@ -78,11 +79,11 @@ JOIN perf p USING (team_key)
 JOIN v_team_classification c USING (team_key)
 ORDER BY c.team_rank;`
   const rows = await q(sql)
-  const p = panel(root, { title: 'Team outcomes', tag: 'E3 E13', sql, note: 'Team time adds the three fastest finish times per team on each stage. Recorded rider adjusted time adds all available individual results, so teams with fewer rider-stage records can appear lower without being stronger. Avg. finisher adjusted time is the mean of full-race adjusted times among riders who completed all 21 stages; withdrawn riders are excluded. All 23 rosters started with 8 riders.' })
+  const p = panel(root, { title: 'Team Classification & Performance', tag: 'E3 E13', sql, note: "Team time sums the three fastest riders' times per stage across all 21 stages; Gap is relative to the leader. Aggregate adjusted time sums all recorded rider-stage results and is affected by withdrawals. Avg. finisher time includes only riders who completed all 21 stages. All 23 teams started with eight riders." })
   p.body.append(table({ rows, onRow: (r) => open({ t: 'team', id: r.team_key }), hit: (r) => r.team_rank === 1, cols: [
     { k: 'team_rank', l: 'Rank', n: 1 }, teamCol(), { k: 'team_country_code', l: 'Reg.', f: (v) => natLink(v) },
     { k: 'team_time', l: 'Team time (best 3/stage)', n: 1, f: fmtTime }, { k: 'team_gap', l: 'Gap', n: 1, f: fmtGap },
-    { k: 'total_adjusted', l: 'Recorded rider adj.', n: 1, f: fmtTime }, { k: 'per_finisher', l: 'Avg. finisher adj.', n: 1, f: fmtTime },
+    { k: 'total_adjusted', l: 'Aggregate adj. time', n: 1, f: fmtTime }, { k: 'per_finisher', l: 'Avg. finisher time', n: 1, f: fmtTime },
     { k: 'finishers', l: 'Finishers', n: 1 }, { k: 'nations', l: 'Nations', n: 1 }, { k: 'best_gc', l: 'Best GC', n: 1 }, { k: 'wins', l: 'Wins', n: 1 }, { k: 'top10s', l: 'Top 10', n: 1 }] }))
 
   await rankEvolutionPanel(root)
@@ -107,7 +108,7 @@ JOIN stage_counts c USING (terrain);`
   for (const d of data) totals.set(d.team_name, (totals.get(d.team_name) ?? 0) + Number(d.top10s))
   const order = [...totals].filter(([, v]) => v > 0).sort((a, b) => a[1] - b[1]).map(([n]) => n)
   const keyOf = new Map(data.map((d) => [d.team_name, d.team_key]))
-  const tp = panel(root, { title: 'Top-ten intensity by team and terrain', tag: 'E14', sql: tt, note: 'Bars show absolute top-ten finishes. The tooltip also shows top-ten finishes per stage of type; it can exceed 1 because multiple riders can place in one stage. Click a bar to open the team.' })
+  const tp = panel(root, { title: 'Top-10 Finishes by Team and Stage Type', tag: 'E14', sql: tt, note: "Each bar shows a team's total top-10 finishes across stage types. Hover for per-stage averages or click a bar to explore the team." })
   tp.body.append(chart((t) => ({
     ...baseOpt(t), grid: { left: 8, right: 34, top: 30, bottom: 22, containLabel: true },
     xAxis: { type: 'value', ...axisStyle(t) }, yAxis: { type: 'category', data: order.map(shortTeam), ...axisStyle(t), axisLabel: { color: t.ink2, fontSize: 12 }, splitLine: { show: false } },
@@ -153,7 +154,7 @@ ORDER BY v.team_rank, e.stage_id;`
   const teams = [...new Map(rows.map((r) => [r.team_key, { key: r.team_key, name: r.team_name, finalRank: Number(r.final_rank) }])).values()]
   const selected = Object.fromEntries(teams.map((t) => [t.name, t.finalRank <= 6]))
   const keyOf = new Map(teams.map((t) => [t.name, t.key]))
-  const rp = panel(root, { title: 'Team rank evolution', tag: 'E3', sql, note: 'Cumulative rank after each stage, using the three fastest finish times per team. Rank 1 is at the top. The default shows the final top six; use the legend to inspect any team. Ties use the same time-only RANK as the reconstructed leaderboard.' })
+  const rp = panel(root, { title: 'Team rank evolution', tag: 'E3', sql, note: 'Cumulative team rankings after each stage, based on the three fastest riders per team. The final top six are shown by default; select other teams from the legend.' })
   rp.body.append(chart((t) => ({
     ...baseOpt(t),
     legend: { ...baseOpt(t).legend, type: 'scroll', data: teams.map((x) => x.name), selected, formatter: shortTeam },
@@ -185,8 +186,8 @@ JOIN dim_stage s USING (stage_key)
 GROUP BY r.rider_key, t.team_key
 ORDER BY top10s DESC, r.rider_name
 LIMIT 10;`
-  const cq = panel(root, { title: 'Consistency near the front', tag: 'E12', sql: cSql, note: 'Riders with the most top-ten stage finishes. Each ordinal is the rider’s Stage Rank in that specific stage.' })
-  cq.body.append(table({ rows: await q(cSql), onRow: (r) => open({ t: 'rider', id: r.rider_key }), cols: [riderCol(), { k: 'top10s', l: 'Top 10', n: 1 }, { k: 'stages', l: 'Top-ten stages · Type · Stage Rank', f: (v) => h('span', { class: 'mono', style: 'font-size:12px;white-space:normal;line-height:1.55' }, v) }] }))
+  const cq = panel(root, { title: 'Most Frequent Top-10 Finishers', tag: 'E12', sql: cSql, note: 'Riders ranked by their number of top-10 stage finishes. Click a rider to view the contributing stages, stage types, and finishing ranks.' })
+  cq.body.append(table({ rows: await q(cSql), onRow: (r) => open({ t: 'rider', id: r.rider_key }), cols: [riderCol(), teamCol(), { k: 'top10s', l: 'Top-10 Finishes', n: 1 }] }))
 }
 
 export default { id: 'teams', label: 'Teams', render: pageTeams }
