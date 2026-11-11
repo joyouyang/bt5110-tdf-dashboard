@@ -126,27 +126,44 @@ ORDER BY g.gc_rank NULLS LAST, r.rider_name;`
 }
 
 // ---------- Nation podium (E9) ----------
-// Stage podium places credited to the team's registered country or to the rider's nationality.
-const podiumSql = (basis) => {
-  const [join, code, name] = basis === 'team'
-    ? ['dim_team t USING (team_key)', 't.team_country_code', 't.team_country_name']
-    : ['dim_rider r USING (rider_key)', 'r.rider_country_code', 'r.rider_country_name']
-  return `WITH p AS (
-  SELECT ${code} AS code, ${name} AS name, f.stage_rank
-  FROM fact_results f
-  JOIN ${join}
-  WHERE f.is_podium = 1
+// Stage podium places and best GC, credited to the team's registered country or to the rider's nationality.
+// Every nation in the chosen view is listed; nations without a podium get no rank when ranking by results.
+const RANK_BY = {
+  wins: { label: 'Most wins', rank: 'CASE WHEN podiums > 0 THEN RANK() OVER (ORDER BY firsts DESC, seconds DESC, thirds DESC) END', order: 'firsts DESC, seconds DESC, thirds DESC, b.best_gc NULLS LAST, name' },
+  podiums: { label: 'Most podiums', rank: 'CASE WHEN podiums > 0 THEN RANK() OVER (ORDER BY podiums DESC, firsts DESC, seconds DESC) END', order: 'podiums DESC, firsts DESC, seconds DESC, b.best_gc NULLS LAST, name' },
+  gc: { label: 'Best GC', rank: 'CASE WHEN b.best_gc IS NOT NULL THEN RANK() OVER (ORDER BY b.best_gc) END', order: 'b.best_gc NULLS LAST, name' },
+}
+const podiumSql = (basis, rankBy = 'wins') => {
+  const by = RANK_BY[rankBy]
+  const team = basis === 'team'
+  const nations = team
+    ? 'SELECT DISTINCT team_country_code AS code, team_country_name AS name FROM dim_team'
+    : 'SELECT DISTINCT rider_country_code AS code, rider_country_name AS name FROM dim_rider'
+  const places = team
+    ? 'SELECT t.team_country_code AS code, f.stage_rank FROM fact_results f JOIN dim_team t USING (team_key) WHERE f.is_podium = 1'
+    : 'SELECT r.rider_country_code AS code, f.stage_rank FROM fact_results f JOIN dim_rider r USING (rider_key) WHERE f.is_podium = 1'
+  const best = team
+    ? 'SELECT t.team_country_code AS code, MIN(g.gc_rank) AS best_gc FROM v_gc g JOIN dim_team t ON t.team_name = g.team_name GROUP BY 1'
+    : 'SELECT rider_country_code AS code, MIN(gc_rank) AS best_gc FROM v_gc GROUP BY 1'
+  return `WITH n AS (
+  ${nations}
+), p AS (
+  ${places}
 ), c AS (
-  SELECT code, name,
-         COUNT(*) FILTER (WHERE stage_rank = 1) AS firsts,
-         COUNT(*) FILTER (WHERE stage_rank = 2) AS seconds,
-         COUNT(*) FILTER (WHERE stage_rank = 3) AS thirds,
-         COUNT(*) AS podiums
-  FROM p GROUP BY code, name
+  SELECT n.code, n.name,
+         COUNT(p.code) FILTER (WHERE p.stage_rank = 1) AS firsts,
+         COUNT(p.code) FILTER (WHERE p.stage_rank = 2) AS seconds,
+         COUNT(p.code) FILTER (WHERE p.stage_rank = 3) AS thirds,
+         COUNT(p.code) AS podiums
+  FROM n LEFT JOIN p USING (code)
+  GROUP BY n.code, n.name
+), b AS (
+  ${best}
 )
-SELECT RANK() OVER (ORDER BY firsts DESC, seconds DESC, thirds DESC) AS nation_rank, *
-FROM c
-ORDER BY nation_rank, name;`
+SELECT ${by.rank} AS nation_rank,
+       c.*, b.best_gc
+FROM c LEFT JOIN b USING (code)
+ORDER BY ${by.order};`
 }
 const STEPS = { 1: { height: 112, bg: 'var(--jaune)', fg: 'var(--on-jaune)' }, 2: { height: 84, bg: 'var(--sunken)', fg: 'var(--ink)' }, 3: { height: 62, bg: 'var(--sunken)', fg: 'var(--ink)' } }
 const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`
@@ -157,31 +174,37 @@ const podiumBlocks = (top) => h('div', { style: 'display:grid;grid-template-colu
     return h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-width:0' },
       here.map((r) => h('div', {},
         h('button', { class: 'lnk', style: 'font-weight:600;white-space:normal', onclick: () => open({ t: 'nation', id: r.code }) }, r.name),
-        h('div', { class: 'dim', style: 'font-size:12px' }, `${plural(r.firsts, 'win')} · ${plural(r.podiums, 'podium')}`))),
+        h('div', { class: 'dim', style: 'font-size:12px' }, `${plural(r.firsts, 'win')} · ${plural(r.podiums, 'podium')}`),
+        r.best_gc != null && h('div', { class: 'dim', style: 'font-size:12px' }, `Best GC ${r.best_gc}`))),
       h('div', { style: `width:100%;height:${s.height}px;background:${s.bg};color:${s.fg};border:1px solid var(--line);border-radius:4px 4px 0 0;display:flex;justify-content:center;padding-top:8px;font-size:28px;font-weight:700` }, String(place)))
   }))
 
 async function nationPodium(root) {
-  let basis = 'team', seq = 0
-  const p = panel(root, { title: 'Nation podium', tag: 'E9', sql: podiumSql(basis), note: 'Stage wins, 2nd and 3rd places by nation, ranked like a medal table: most wins first, then 2nd places, then 3rd places. Team registered credits each result to the country of the rider\'s team; Riders credits it to the rider\'s nationality. Click a nation for its riders and stages.' })
+  let basis = 'team', rankBy = 'wins', seq = 0
+  const p = panel(root, { title: 'Nation podium', tag: 'E9', sql: podiumSql(basis, rankBy), note: 'Stage results and best GC by nation. Team registered credits each result to the country of the rider\'s team; Riders credits it to the rider\'s nationality. Most wins ranks like a medal table: most wins, then 2nd places, then 3rd places. Most podiums counts all top-three finishes, with ties going to more wins. Best GC ranks by the nation\'s best overall placing. When ranking by wins or podiums, nations without a podium are listed last, unranked. Click a nation for its riders and stages.' })
   const out = h('div')
   p.body.append(out)
   const draw = async () => {
-    const mine = ++seq, sql = podiumSql(basis)
+    const mine = ++seq, sql = podiumSql(basis, rankBy)
     const rows = await q(sql)
-    const [all] = await q(basis === 'team' ? 'SELECT COUNT(DISTINCT team_country_code) AS n FROM dim_team' : 'SELECT COUNT(DISTINCT rider_country_code) AS n FROM dim_rider')
     if (mine !== seq) return
     p.sql = sql
-    const rest = rows.filter((r) => Number(r.nation_rank) > 3)
+    const onPodium = (r) => r.nation_rank != null && Number(r.nation_rank) <= 3
+    const rest = rows.filter((r) => !onPodium(r))
+    const scored = rows.filter((r) => Number(r.podiums) > 0).length
     out.replaceChildren(
-      podiumBlocks(rows.filter((r) => Number(r.nation_rank) <= 3)),
+      podiumBlocks(rows.filter(onPodium)),
       rest.length ? table({ rows: rest, onRow: (r) => open({ t: 'nation', id: r.code }), cols: [
-        { k: 'nation_rank', l: 'Rank', n: 1 }, { k: 'code', l: 'Code', f: (v) => natLink(v) }, { k: 'name', l: 'Country' },
-        { k: 'firsts', l: '1st', n: 1 }, { k: 'seconds', l: '2nd', n: 1 }, { k: 'thirds', l: '3rd', n: 1 }, { k: 'podiums', l: 'Podiums', n: 1 }] }) : null,
-      h('div', { class: 'dim', style: 'padding-top:8px' }, `${rows.length} of ${all.n} ${basis === 'team' ? 'team countries' : 'nationalities'} reached a stage podium.`),
+        { k: 'nation_rank', l: 'Rank', n: 1, f: (v) => v ?? '–' }, { k: 'code', l: 'Code', f: (v) => natLink(v) }, { k: 'name', l: 'Country' },
+        { k: 'firsts', l: '1st', n: 1 }, { k: 'seconds', l: '2nd', n: 1 }, { k: 'thirds', l: '3rd', n: 1 }, { k: 'podiums', l: 'Podiums', n: 1 },
+        { k: 'best_gc', l: 'Best GC', n: 1, hint: basis === 'team' ? 'Best overall placing by a rider on this country\'s teams' : 'Best overall placing by a rider of this nationality', f: (v) => v ?? '–' }] }) : null,
+      h('div', { class: 'dim', style: 'padding-top:8px' }, `${scored} of ${rows.length} ${basis === 'team' ? 'team countries' : 'nationalities'} reached a stage podium.`),
     )
   }
-  p.controls(seg([['team', 'Team registered'], ['rider', 'Riders']], basis, (v) => { basis = v; draw() }))
+  p.controls(
+    h('span', { class: 'dim' }, 'Count for'), seg([['team', 'Team registered'], ['rider', 'Riders']], basis, (v) => { basis = v; draw() }),
+    h('span', { class: 'dim' }, 'Rank by'), seg(Object.entries(RANK_BY).map(([k, v]) => [k, v.label]), rankBy, (v) => { rankBy = v; draw() }),
+  )
   await draw()
 }
 
