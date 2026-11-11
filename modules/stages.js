@@ -362,7 +362,8 @@ async function replayPanel(root, race, onOpen) {
   const first = race.rows[0].stage_id, last = race.rows.at(-1).stage_id
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches
   const state = { n: still ? last : first, replay: true }
-  const p = panel(root, { title: 'The race, stage by stage', tag: 'E15', sql: runSql })
+  const p = panel(root, { title: 'The race, stage by stage', tag: 'E15', sql: runSql,
+    note: 'The race replayed one stage at a time: the map follows the route, the top chart shows how far the top five overall sit behind the leader, and the bottom chart counts the riders still finishing.' })
   const stacked = root.clientWidth <= 900
   const wide = stacked ? root.clientWidth - 30 : root.clientWidth * 0.42
   const height = stacked ? 430 : mapHeight(wide)
@@ -484,7 +485,8 @@ async function topTen(id, mode, type) {
 
 async function focusE(root, race) {
   let id = race.decisive.stage_id, mode = 'riders', type = 'All'
-  const p = panel(root, { title: 'A stage in focus', tag: 'E2 · E11 · E15', sql: '' })
+  const p = panel(root, { title: 'A stage in focus', tag: 'E2 · E11 · E15', sql: '',
+    note: `One stage up close: the first ten riders and their time behind the stage winner; switch to Teams to compare the squads that day. It opens on stage ${race.decisive.stage_id}, where ${S.finishers[0].rider_name} gained the most time on ${S.finishers[1].rider_name}.` })
   // the stages worth a second look, each a shortcut
   const go = (r) => h('button', { class: 'lnk', onclick: () => set(r.stage_id) }, `Stage ${r.stage_id}`)
   const special = note('Special attention: ', 'longest stage ', go(race.longest), ` (${fmtNum(race.longest.km, 1)} km) · key stage for the winner `, go(race.decisive),
@@ -532,6 +534,30 @@ async function stageViewE(id, title, body) {
   await show('riders')
 }
 
+// ---------- All stages (E11, E15): one row per stage, longest first ----------
+async function stageListPanel(root, focus) {
+  const sql = `SELECT s.stage_id, s.stage_date::text AS stage_date, s.terrain, s.start_location, s.finish_location,
+       s.distance_km::float8 AS km, r.rider_key, r.rider_name AS winner, t.team_key, t.team_name
+FROM dim_stage s
+JOIN fact_results f ON f.stage_key = s.stage_key AND f.is_win = 1   -- the stage winner
+JOIN dim_rider r ON r.rider_key = f.rider_key
+JOIN dim_team t ON t.team_key = f.team_key
+ORDER BY s.distance_km DESC;`
+  const rows = await q(sql)
+  const count = (t) => rows.filter((r) => r.terrain === t).length
+  const p = panel(root, { title: `All ${rows.length} stages`, tag: 'E11 · E15', sql,
+    note: `Every stage with its date, route, type, distance and winner, longest first: stage ${rows[0].stage_id} is the longest at ${fmtNum(rows[0].km, 1)} km. The ${count('ITT')} time trials are stages ${rows.filter((r) => r.terrain === 'ITT').map((r) => r.stage_id).sort((a, b) => a - b).join(' and ')}; click Type to group them. Click a row to open that stage above.` })
+  p.body.append(table({ rows, onRow: (r) => focus.set(r.stage_id, true), hit: (r) => r === rows[0], cols: [
+    { k: 'stage_id', l: 'Stage', n: 1 },
+    { k: 'stage_date', l: 'Date', f: (v) => h('span', { style: 'white-space:nowrap' }, day(v)) },
+    { k: 'start_location', l: 'Start → finish', f: (v, r) => arrow(r) },
+    { k: 'terrain', l: 'Type', f: (v) => terrain(v) },
+    { k: 'km', l: 'Distance', n: 1, f: (v) => `${fmtNum(v, 1)} km` },
+    { ...riderCol('winner'), l: 'Winner' },
+    teamCol(),
+  ] }))
+}
+
 // ---------- Mountain stages (E5): podiums and mean gap, with the daily gaps behind them ----------
 async function mountainPanel(root, focus, span = 7) {
   const sql = `SELECT r.rider_key, r.rider_name,
@@ -545,7 +571,8 @@ WHERE s.terrain = 'Mountain' AND r.race_status = 'Finished'
 GROUP BY r.rider_key, r.rider_name
 ORDER BY podiums DESC, mean_gap;`
   const rows = await q(sql)
-  const p = panel(root, { title: 'Mountain stages', tag: 'E5', span, sql })
+  const p = panel(root, { title: 'Mountain stages', tag: 'E5', span, sql,
+    note: `Who climbed best: top-three finishes and average time behind the stage winner on the ${S.mountain.length} Mountain stages, with the gap on each one.` })
   const most = Math.max(...rows.map((r) => r.podiums))
   const cell = (id) => (v, r) => (r[`place_${id}`] <= 3
     ? h('span', { title: `${ord(r[`place_${id}`])} place`, style: 'font-weight:700;padding:1px 4px;border-radius:3px;background:color-mix(in srgb, var(--jaune) 28%, transparent)' }, fmtGap(v))
@@ -603,7 +630,7 @@ async function pacePanel(root) {
   const all = () => (level === 'teams' ? 'All teams' : 'All riders')
 
   const p = panel(root, { title: 'Speed by stage type', tag: 'E6', sql: paceSql(level),
-  })
+    note: 'Average speed on Flat, Hilly, Mountain and ITT stages for one rider or team against the field (left), and how many minutes each one gains or loses on the average rider by stage type (right).' })
   p.body.append(note(`Speed = total km ÷ total hours on the stages of one type, ${data.riders.length} finishers.`))
   const pickSlot = h('span', {}), leftHead = h('div', {}), rightHead = h('div', {})
   const left = h('div', { style: 'min-width:0' }), right = h('div', { style: 'min-width:0' })
@@ -717,6 +744,7 @@ async function render(el) {
   focus = await focusE(el, race)
   await pacePanel(el)
   await mountainPanel(el, focus, 0)
+  await stageListPanel(el, focus)
 }
 
 VIEWS.stage = stageViewE
